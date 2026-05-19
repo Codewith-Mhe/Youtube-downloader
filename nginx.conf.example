@@ -1,0 +1,120 @@
+# /etc/nginx/sites-available/clipfetch
+#
+# Reverse proxy for ClipFetch on a VPS.
+#   - Backend (FastAPI/uvicorn) on 127.0.0.1:8000
+#   - Frontend (Next.js)        on 127.0.0.1:3000
+#
+# After saving this file:
+#   sudo ln -s /etc/nginx/sites-available/clipfetch /etc/nginx/sites-enabled/
+#   sudo nginx -t && sudo systemctl reload nginx
+#   sudo certbot --nginx -d clipfetch.example.com
+#
+# Replace clipfetch.example.com with your domain.
+
+# ---------- upstreams ----------
+upstream clipfetch_api {
+    server 127.0.0.1:8000;
+    keepalive 16;
+}
+
+upstream clipfetch_web {
+    server 127.0.0.1:3000;
+    keepalive 16;
+}
+
+# ---------- main server ----------
+server {
+    listen 80;
+    listen [::]:80;
+    server_name clipfetch.example.com;
+
+    # Let certbot manage the TLS block. After running:
+    #   sudo certbot --nginx -d clipfetch.example.com
+    # the relevant `listen 443 ssl;` and certificate paths are added here.
+
+    # Reasonable upload size (request bodies are tiny — JSON only)
+    client_max_body_size 64k;
+
+    # Hide nginx version
+    server_tokens off;
+
+    # ----- security headers -----
+    add_header X-Frame-Options          "DENY" always;
+    add_header X-Content-Type-Options   "nosniff" always;
+    add_header Referrer-Policy          "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy       "camera=(), microphone=(), geolocation=()" always;
+    # A starter CSP — tighten / loosen as you wire up analytics, fonts, etc.
+    add_header Content-Security-Policy  "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none';" always;
+
+    # ----- gzip on small responses -----
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types
+        text/plain text/css application/json application/javascript
+        application/xml application/rss+xml text/xml image/svg+xml;
+    # NOTE: do NOT gzip the /api/download path. Videos are already compressed
+    # and re-gzipping just burns CPU. The map below avoids it.
+    map $uri $no_gzip {
+        default 0;
+        ~^/api/download 1;
+    }
+    gzip_disable "$no_gzip";
+
+    # ============================================================
+    # /api/  -> FastAPI backend (extraction + downloads)
+    # ============================================================
+    location /api/ {
+        proxy_pass http://clipfetch_api;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+
+        # Real client info — backend honors X-Forwarded-For when TRUST_PROXY=true
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+
+        # Streaming-friendly: don't buffer large bodies on disk, don't time out
+        # while a long download is in flight, send chunks straight through.
+        proxy_buffering         off;
+        proxy_request_buffering off;
+        proxy_read_timeout      900s;
+        proxy_send_timeout      900s;
+        proxy_connect_timeout   30s;
+        send_timeout            900s;
+
+        # Don't gzip the download stream (see map above)
+        gzip off;
+    }
+
+    # ============================================================
+    # everything else -> Next.js frontend
+    # ============================================================
+    location / {
+        proxy_pass http://clipfetch_web;
+        proxy_http_version 1.1;
+        proxy_set_header Connection         "";
+        proxy_set_header Host               $host;
+        proxy_set_header X-Real-IP          $remote_addr;
+        proxy_set_header X-Forwarded-For    $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto  $scheme;
+
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+    }
+
+    # Static Next.js assets — long cache
+    location /_next/static/ {
+        proxy_pass http://clipfetch_web;
+        proxy_set_header Host $host;
+        proxy_cache_valid 200 30d;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    # ACME challenge (certbot)
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+}
