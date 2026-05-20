@@ -299,7 +299,7 @@ def stream_format(url: str, format_id: str, platform: Platform):
     
 
     try:
-        resp = requests.get(direct_url, headers=headers, stream=True, timeout=30)
+        resp = requests.get(direct_url, headers=headers, stream=True, timeout=(10, 300))
         resp.raise_for_status()
     except requests.RequestException as e:
         raise ExtractionError("Upstream download failed. Please try again.", status=502) from e
