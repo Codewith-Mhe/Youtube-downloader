@@ -76,8 +76,6 @@ _BASE_OPTS: Dict[str, Any] = {
 
 def _ydl_opts(platform: Platform) -> Dict[str, Any]:
     opts = dict(_BASE_OPTS)
-    # Tighten format selection a bit per platform. yt-dlp handles each one
-    # well; these are just sensible defaults.
     if platform == "youtube":
         opts["youtube_include_dash_manifest"] = True
         opts["extractor_args"] = {
@@ -85,9 +83,11 @@ def _ydl_opts(platform: Platform) -> Dict[str, Any]:
                 "player_client": ["web", "android"],
             }
         }
-        opts["cookiefile"] = os.path.join(
-    os.path.dirname(__file__), "..", "..", "..", "cookies.txt"
-)
+        cookies_path = "/opt/render/project/src/cookies.txt"
+        if os.path.exists(cookies_path):
+            opts["cookiefile"] = cookies_path
+        else:
+            log.warning("cookies.txt not found at %s", cookies_path)
     return opts
 
 
