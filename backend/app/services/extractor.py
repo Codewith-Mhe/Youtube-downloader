@@ -289,6 +289,15 @@ def stream_format(url: str, format_id: str, platform: Platform):
     # Some platforms reject requests without a User-Agent
     headers.setdefault("User-Agent", _BASE_OPTS["http_headers"]["User-Agent"])
 
+    # TikTok and X/Twitter CDNs require platform-specific referer headers
+    if platform == "tiktok":
+        headers.setdefault("Referer", "https://www.tiktok.com/")
+        headers.setdefault("Origin", "https://www.tiktok.com")
+    elif platform == "twitter":
+        headers.setdefault("Referer", "https://twitter.com/")
+        headers.setdefault("Origin", "https://twitter.com")
+    
+
     try:
         resp = requests.get(direct_url, headers=headers, stream=True, timeout=30)
         resp.raise_for_status()

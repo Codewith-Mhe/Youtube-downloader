@@ -19,6 +19,11 @@
       radial-gradient(ellipse 60% 50% at 0% 100%, rgba(200, 242, 92, 0.04), transparent 60%);
     background-attachment: fixed;
   }
+  @supports (-webkit-touch-callout: none) {
+  body {
+    background-attachment: scroll;
+  }
+}
   ::selection {
     background: theme("colors.lime.DEFAULT");
     color: theme("colors.ink.950");
