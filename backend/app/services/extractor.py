@@ -85,6 +85,9 @@ def _ydl_opts(platform: Platform) -> Dict[str, Any]:
                 "player_client": ["web", "android"],
             }
         }
+        opts["cookiefile"] = os.path.join(
+            os.path.dirname(__file__), "..", "..", "cookies.txt"
+        )
     return opts
 
 
