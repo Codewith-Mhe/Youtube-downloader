@@ -18,16 +18,18 @@ const instrumentSerif = Instrument_Serif({
   display: "swap",
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://clipfetch.app";
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://clipfetch.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "ClipFetch — Download videos from YouTube, TikTok, X, and Facebook",
+    default:
+      "ClipFetch — Download videos from YouTube, TikTok, X, and Facebook",
     template: "%s · ClipFetch",
   },
   description:
-    "Paste your video link, pick a quality, and download instantly. No signup. No ads. Works on mobile and desktop.",
+    "Download videos from YouTube, TikTok, X, and Facebook instantly in multiple qualities — fast, free, and without signup.",
   keywords: [
     "youtube downloader",
     "tiktok downloader",
@@ -35,12 +37,14 @@ export const metadata: Metadata = {
     "x video downloader",
     "facebook video downloader",
     "free video downloader",
+    "video downloader",
+    "clipfetch",
   ],
   openGraph: {
     type: "website",
     title: "ClipFetch — Download videos in seconds",
     description:
-      "Paste your video link, pick a quality, and download instantly. YouTube, TikTok, X, and Facebook supported.",
+      "Download videos from YouTube, TikTok, X, and Facebook instantly in multiple qualities.",
     url: SITE_URL,
     siteName: "ClipFetch",
   },
@@ -48,9 +52,12 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "ClipFetch — Download videos in seconds",
     description:
-      "Paste your video link, pick a quality, and download instantly.",
+      "Paste your video link, choose quality, and download instantly.",
   },
-  robots: { index: true, follow: true },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export const viewport: Viewport = {
@@ -69,11 +76,16 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${instrumentSerif.variable}`}
     >
-      <body className="min-h-screen relative">
+      <body className="min-h-screen relative bg-black text-white antialiased">
         <div className="grain-overlay" aria-hidden="true" />
+
         <div className="relative z-10 flex min-h-screen flex-col">
           <SiteHeader />
-          <main className="flex-1">{children}</main>
+
+          <main className="flex-1">
+            {children}
+          </main>
+
           <SiteFooter />
         </div>
       </body>
