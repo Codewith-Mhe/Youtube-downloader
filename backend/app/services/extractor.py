@@ -80,6 +80,11 @@ def _ydl_opts(platform: Platform) -> Dict[str, Any]:
     # well; these are just sensible defaults.
     if platform == "youtube":
         opts["youtube_include_dash_manifest"] = True
+        opts["extractor_args"] = {
+            "youtube": {
+                "player_client": ["web", "android"],
+            }
+        }
     return opts
 
 
