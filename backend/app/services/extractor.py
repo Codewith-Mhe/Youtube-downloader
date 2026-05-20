@@ -86,8 +86,8 @@ def _ydl_opts(platform: Platform) -> Dict[str, Any]:
             }
         }
         opts["cookiefile"] = os.path.join(
-            os.path.dirname(__file__), "..", "..", "cookies.txt"
-        )
+    os.path.dirname(__file__), "..", "..", "..", "cookies.txt"
+)
     return opts
 
 
