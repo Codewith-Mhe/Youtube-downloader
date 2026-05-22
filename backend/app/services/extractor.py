@@ -202,7 +202,19 @@ def _selector_for_tier(tier: str, platform: Platform) -> str:
 # ── URL normalization ─────────────────────────────────────────────────────────
 def _normalize_url(url: str, platform: Platform) -> str:
     """Light URL canonicalization to help yt-dlp pick the right extractor."""
-    if platform == "facebook":
+    if platform == "youtube":
+        # Strip playlist/radio params so yt-dlp fetches the single video only.
+        # A URL like ?v=abc&list=RD...&start_radio=1 triggers playlist mode,
+        # which makes extra network requests and can confuse the extractor.
+        from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+        parsed = urlparse(url)
+        params = parse_qs(parsed.query, keep_blank_values=True)
+        if "v" in params:
+            clean = urlencode({"v": params["v"][0]})
+            url = urlunparse(parsed._replace(query=clean))
+            log.debug("YouTube URL normalized: %s", url)
+
+    elif platform == "facebook":
         # web.facebook.com / m.facebook.com → www.facebook.com
         # yt-dlp's Facebook extractor canonicalizes on www.facebook.com.
         url = (
@@ -279,12 +291,31 @@ def _platform_opts(platform: Platform) -> Dict[str, Any]:
     opts = _base_opts()
 
     if platform == "youtube":
+        # player_client order matters enormously for cloud/Render IPs.
+        #
+        # In 2025/2026 YouTube requires a Proof-of-Origin (PO) token for
+        # web clients. Without it, every web/ios/android client returns 403.
+        # The most reliable bypass WITHOUT a PO token is:
+        #   1. tv_embedded  — YouTube's Smart TV embedded player; not subject
+        #                     to PO token enforcement as of 2026.
+        #   2. web_embedded — YouTube embed (iframe) player; lighter enforcement.
+        #   3. tv           — Full TV client; fallback.
+        #   4. ios          — Mobile iOS client; sometimes works without PO token.
+        #
+        # When cookies ARE present (YT_COOKIES_FILE set), web/default clients
+        # also work because the session cookie acts as implicit PO token proof.
+        #
+        # NOTE: player_skip:["configs"] is intentionally removed here.
+        # Skipping configs prevents the extractor from finding the right
+        # INNERTUBE_API_KEY, which causes "Failed to extract any player response"
+        # even when the network connection is fine.
         opts["extractor_args"] = {
             "youtube": {
-                "player_client": ["tv", "ios", "default", "mweb"],
-                "player_skip": ["configs"],
+                "player_client": ["tv_embedded", "web_embedded", "tv", "ios"],
             }
         }
+        opts["socket_timeout"] = 30
+        opts["retries"] = 5
         _apply_cookies(opts, YT_COOKIES_FILE)
 
     elif platform == "tiktok":
@@ -347,13 +378,46 @@ def _classify_error(err: BaseException, platform: Platform | None = None) -> Ext
             status=500,
         )
 
-    # ── YouTube bot detection ────────────────────────────────────────────────
+    # ── YouTube bot detection / PO token (most common on cloud IPs 2025/2026) ─
     if "sign in to confirm" in msg or "not a bot" in msg or "confirm you're not" in msg:
+        if YT_COOKIES_FILE:
+            return ExtractionError(
+                "YouTube is blocking this server even with cookies. "
+                "Your cookies may have expired — re-export from your browser and re-deploy.",
+                status=429,
+            )
         return ExtractionError(
-            "YouTube is rate-limiting our server. This is a known issue "
-            "with cloud-hosted downloaders. Please try again in a few "
-            "minutes, or try a different video.",
+            "YouTube requires sign-in verification on this server. "
+            "To fix: export a YouTube cookies.txt from your browser and set "
+            "YT_COOKIES_FILE to its path on the server.",
             status=429,
+        )
+
+    # ── YouTube: failed to extract any player response ────────────────────────
+    # This happens when ALL player clients return 403 — either the server IP is
+    # fully blocked by YouTube, or cookies are missing/expired.
+    if "failed to extract any player response" in msg:
+        if YT_COOKIES_FILE:
+            return ExtractionError(
+                "YouTube blocked all player clients on this server. "
+                "Your cookies may have expired — re-export and re-deploy. "
+                "If the problem persists, the server IP may be fully blocked by YouTube.",
+                status=429,
+            )
+        return ExtractionError(
+            "YouTube blocked all player clients on this server. "
+            "This is a known issue with cloud-hosted video downloaders. "
+            "Fix: export a YouTube cookies.txt from your browser (while logged in) "
+            "and set YT_COOKIES_FILE to its path on the server.",
+            status=429,
+        )
+
+    # ── YouTube: INNERTUBE_CONTEXT missing (oauth2 plugin conflict) ───────────
+    if "innertube_context" in msg:
+        return ExtractionError(
+            "YouTube extractor conflict — a yt-dlp plugin is interfering. "
+            "Please report this to the site operator.",
+            status=500,
         )
 
     # ── BUG 2 FIX: HTTP 403 — Facebook and TikTok block cloud IPs ───────────
