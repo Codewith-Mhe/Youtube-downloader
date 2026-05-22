@@ -279,12 +279,36 @@ def _redact_proxy(p: str) -> str:
 
 
 def _apply_cookies(opts: Dict[str, Any], cookies_file: str) -> None:
-    """Attach a cookie file to opts if the path exists."""
-    if cookies_file and Path(cookies_file).is_file():
-        opts["cookiefile"] = cookies_file
-        log.info("Using cookies file: %s", cookies_file)
-    elif cookies_file:
+    """Attach a cookie file to opts if the path exists.
+    
+    Render mounts Secret Files at /etc/secrets/ as a READ-ONLY filesystem.
+    yt-dlp tries to save updated cookies back to the file after each request,
+    which causes OSError: [Errno 30] Read-only file system.
+    
+    Fix: copy the cookies file to /tmp (writable) at first use and point
+    yt-dlp at the writable copy instead.
+    """
+    if not cookies_file:
+        return
+    
+    src = Path(cookies_file)
+    if not src.is_file():
         log.warning("Cookies file not found: %s", cookies_file)
+        return
+    
+    # Copy to /tmp if source is on a read-only filesystem (e.g. Render secrets)
+    writable_path = Path("/tmp") / src.name
+    try:
+        if not writable_path.exists() or writable_path.stat().st_size != src.stat().st_size:
+            import shutil
+            shutil.copy2(str(src), str(writable_path))
+            log.info("Copied cookies to writable path: %s", writable_path)
+        opts["cookiefile"] = str(writable_path)
+        log.info("Using cookies file: %s", writable_path)
+    except Exception as e:
+        # Fallback: use original path and hope for the best
+        log.warning("Could not copy cookies to /tmp (%s), using original: %s", e, cookies_file)
+        opts["cookiefile"] = cookies_file
 
 
 def _platform_opts(platform: Platform) -> Dict[str, Any]:
@@ -436,6 +460,14 @@ def _classify_error(err: BaseException, platform: Platform | None = None) -> Ext
             "YouTube extractor conflict — a yt-dlp plugin is interfering. "
             "Please report this to the site operator.",
             status=500,
+        )
+
+    # ── Proxy authentication failure ─────────────────────────────────────────
+    if "407" in msg or "proxy authentication" in msg or "proxyerror" in msg.replace(" ", ""):
+        return ExtractionError(
+            "Proxy authentication failed (407). "
+            "Check that YTDLP_PROXY credentials are correct in your environment variables.",
+            status=502,
         )
 
     # ── BUG 2 FIX: HTTP 403 — Facebook and TikTok block cloud IPs ───────────
