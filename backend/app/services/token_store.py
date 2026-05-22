@@ -1,14 +1,4 @@
-"""Secure short-lived token store mapping opaque tokens to extraction params.
-
-Why this exists:
-- The /api/fetch response must NOT expose raw upstream URLs or internal
-  format IDs in a way that lets attackers craft arbitrary download calls.
-- Each format gets a random opaque token that maps to (url, format_id,
-  platform). The /api/download endpoint accepts only that token.
-
-Storage is in-process. For multi-replica deployments swap this for Redis;
-the interface is intentionally tiny.
-"""
+"""Secure short-lived token store mapping opaque tokens to download params."""
 from __future__ import annotations
 
 import asyncio
@@ -27,10 +17,8 @@ MAX_TOKENS = 50_000
 @dataclass
 class DownloadTicket:
     url: str
-    format_id: str
+    tier: str
     platform: str
-    ext: str
-    suggested_filename: str
     expires_at: float
 
 
@@ -69,19 +57,10 @@ class TokenStore:
             if expired:
                 log.debug("Sweeper removed %d expired tokens", len(expired))
 
-    async def put(
-        self,
-        *,
-        url: str,
-        format_id: str,
-        platform: str,
-        ext: str,
-        suggested_filename: str,
-    ) -> str:
+    async def put(self, *, url: str, tier: str, platform: str) -> str:
         async with self._lock:
-            # Enforce a hard cap to prevent memory growth
             if len(self._data) >= MAX_TOKENS:
-                # Evict the oldest ~10%
+                # Evict oldest ~10%
                 for t, _ in sorted(self._data.items(), key=lambda kv: kv[1].expires_at)[
                     : MAX_TOKENS // 10
                 ]:
@@ -89,10 +68,8 @@ class TokenStore:
             token = secrets.token_urlsafe(32)
             self._data[token] = DownloadTicket(
                 url=url,
-                format_id=format_id,
+                tier=tier,
                 platform=platform,
-                ext=ext,
-                suggested_filename=suggested_filename,
                 expires_at=time.time() + TOKEN_TTL_SECONDS,
             )
             return token

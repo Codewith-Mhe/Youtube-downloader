@@ -6,21 +6,17 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, Field, HttpUrl
 
 Platform = Literal["youtube", "tiktok", "twitter", "facebook"]
+Tier = Literal["best", "1080p", "720p", "480p", "360p", "audio"]
 
 
 class FetchRequest(BaseModel):
     url: HttpUrl = Field(..., description="Public URL to a supported video.")
 
 
-class VideoFormat(BaseModel):
-    formatId: str
-    quality: str
-    ext: str
-    size: Optional[str] = None
-    hasAudio: bool
-    hasVideo: bool
+class QualityOption(BaseModel):
+    id: Tier
+    label: str
     downloadUrl: str
-    note: Optional[str] = None
 
 
 class FetchSuccess(BaseModel):
@@ -30,7 +26,7 @@ class FetchSuccess(BaseModel):
     thumbnail: Optional[str] = None
     duration: Optional[str] = None
     uploader: Optional[str] = None
-    formats: List[VideoFormat]
+    qualities: List[QualityOption]
 
 
 class FetchError(BaseModel):

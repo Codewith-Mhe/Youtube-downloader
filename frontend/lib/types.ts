@@ -1,13 +1,10 @@
 export type Platform = "youtube" | "tiktok" | "twitter" | "facebook";
 
-export interface VideoFormat {
-  formatId: string;
-  quality: string;
-  ext: string;
-  size: string | null;
-  hasAudio: boolean;
-  hasVideo: boolean;
-  note?: string | null;
+export type Tier = "best" | "1080p" | "720p" | "480p" | "360p" | "audio";
+
+export interface QualityOption {
+  id: Tier;
+  label: string;
   downloadUrl: string;
 }
 
@@ -18,7 +15,7 @@ export interface FetchSuccess {
   thumbnail?: string | null;
   duration?: string | null;
   uploader?: string | null;
-  formats: VideoFormat[];
+  qualities: QualityOption[];
 }
 
 export interface FetchError {

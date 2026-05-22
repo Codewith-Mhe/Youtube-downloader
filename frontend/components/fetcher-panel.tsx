@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { fetchVideo } from "@/lib/api";
 import { detectPlatform, PLATFORM_LABEL } from "@/lib/platform";
-import type { FetchSuccess, Platform, VideoFormat } from "@/lib/types";
+import type { FetchSuccess, Platform, QualityOption } from "@/lib/types";
 import { PlatformIcon } from "./platform-icon";
 
 type Status = "idle" | "loading" | "ready" | "error";
@@ -26,20 +26,25 @@ export function FetcherPanel() {
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<FetchSuccess | null>(null);
-  const [selectedFormat, setSelectedFormat] = useState<string | null>(null);
+  const [selectedTier, setSelectedTier] = useState<string | null>(null);
+
+  // Download state — separate from fetch state
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
   const inputRef = useRef<HTMLInputElement>(null);
 
   const detected = useMemo(() => detectPlatform(url), [url]);
   const canSubmit = url.trim().length > 0 && status !== "loading";
 
-  // Auto-select highest-quality "merged" format when results arrive
+  // Default to "best" if available, else first option
   useEffect(() => {
-    if (data && data.formats.length > 0 && !selectedFormat) {
-      const best =
-        data.formats.find((f) => f.hasVideo && f.hasAudio) || data.formats[0];
-      setSelectedFormat(best.formatId);
+    if (data && data.qualities.length > 0 && !selectedTier) {
+      const best = data.qualities.find((q) => q.id === "best") || data.qualities[0];
+      setSelectedTier(best.id);
     }
-  }, [data, selectedFormat]);
+  }, [data, selectedTier]);
 
   async function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
@@ -48,7 +53,8 @@ export function FetcherPanel() {
     setStatus("loading");
     setError(null);
     setData(null);
-    setSelectedFormat(null);
+    setSelectedTier(null);
+    setDownloadError(null);
 
     const result = await fetchVideo(trimmed);
     if (result.success) {
@@ -68,7 +74,7 @@ export function FetcherPanel() {
         inputRef.current?.focus();
       }
     } catch {
-      // Clipboard permission denied — silently ignore
+      /* permission denied — silently ignore */
     }
   }
 
@@ -77,12 +83,96 @@ export function FetcherPanel() {
     setStatus("idle");
     setError(null);
     setData(null);
-    setSelectedFormat(null);
+    setSelectedTier(null);
+    setDownloadError(null);
+    setDownloadProgress(null);
     inputRef.current?.focus();
+  }
+
+  /**
+   * The download handler that fixes the `download.json` bug.
+   *
+   * We CANNOT use <a href download> here, because if the server returns a
+   * JSON error (extraction failed, token expired, ffmpeg missing, etc.) the
+   * browser would save it as `download.json` and show "Site wasn't available".
+   *
+   * Instead we:
+   *   1. fetch() the URL ourselves.
+   *   2. Check `response.ok` and `Content-Type`.
+   *   3. If JSON or non-OK → parse the message and show it in the UI.
+   *   4. If binary → read the streaming body with progress, build a Blob,
+   *      and trigger a save via a temporary <a> with the real filename.
+   */
+  async function handleDownload() {
+    const chosen = data?.qualities.find((q) => q.id === selectedTier);
+    if (!chosen || !data) return;
+
+    setDownloading(true);
+    setDownloadError(null);
+    setDownloadProgress(0);
+
+    try {
+      const response = await fetch(chosen.downloadUrl);
+      const contentType = response.headers.get("content-type") || "";
+
+      // Any JSON response is an error envelope — never a real download.
+      if (!response.ok || contentType.includes("application/json")) {
+        const text = await response.text();
+        let message = `Download failed (HTTP ${response.status}).`;
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed?.message) message = parsed.message;
+        } catch {
+          /* not JSON, keep the generic message */
+        }
+        throw new Error(message);
+      }
+
+      // Pull a real filename out of Content-Disposition
+      const cd = response.headers.get("content-disposition") || "";
+      const filename = parseFilename(cd) || defaultFilename(data, chosen);
+
+      const total = Number(response.headers.get("content-length") || 0);
+
+      // Stream the body with progress so big videos don't look frozen
+      if (!response.body) throw new Error("Streaming not supported in this browser.");
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          received += value.length;
+          if (total > 0) {
+            setDownloadProgress(Math.min(100, Math.round((received / total) * 100)));
+          }
+        }
+      }
+
+      const blob = new Blob(chunks as BlobPart[], { type: contentType });
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Give the browser a beat to start the save, then release memory
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1_000);
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : "Download failed.");
+    } finally {
+      setDownloading(false);
+      setDownloadProgress(null);
+    }
   }
 
   return (
     <div className="w-full">
+      {/* ─── URL input ─── */}
       <form onSubmit={handleSubmit} className="w-full">
         <div className="input-shell">
           <div className="pointer-events-none flex items-center pl-3 pr-1 text-bone/40">
@@ -117,11 +207,7 @@ export function FetcherPanel() {
           >
             <Clipboard className="h-4 w-4" />
           </button>
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            className="btn-primary !px-5 !py-2.5"
-          >
+          <button type="submit" disabled={!canSubmit} className="btn-primary !px-5 !py-2.5">
             {status === "loading" ? (
               <>
                 <Spinner />
@@ -142,13 +228,11 @@ export function FetcherPanel() {
               ? <>detected · <span className="text-lime">{PLATFORM_LABEL[detected]}</span></>
               : <>no link detected</>}
           </span>
-          <span className="hidden sm:block font-mono">
-            ⌘V to paste
-          </span>
+          <span className="hidden sm:block font-mono">⌘V to paste</span>
         </div>
       </form>
 
-      {/* Result area */}
+      {/* ─── Result area ─── */}
       <AnimatePresence mode="wait">
         {status === "loading" && <LoadingState key="loading" />}
         {status === "error" && (
@@ -158,22 +242,23 @@ export function FetcherPanel() {
           <ResultCard
             key="ready"
             data={data}
-            selected={selectedFormat}
-            onSelect={setSelectedFormat}
+            selected={selectedTier}
+            onSelect={setSelectedTier}
             onReset={reset}
+            onDownload={handleDownload}
+            downloading={downloading}
+            progress={downloadProgress}
+            downloadError={downloadError}
           />
         )}
       </AnimatePresence>
 
-      {/* Hints when idle */}
+      {/* ─── Idle hints ─── */}
       {status === "idle" && (
         <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs text-bone/40">
           <span className="mono-label !tracking-[0.2em] !text-bone/30">Supports</span>
           {PLATFORM_HINTS.map((p) => (
-            <span
-              key={p}
-              className="inline-flex items-center gap-1.5 rounded-full border hairline px-3 py-1.5"
-            >
+            <span key={p} className="inline-flex items-center gap-1.5 rounded-full border hairline px-3 py-1.5">
               <PlatformIcon platform={p} className="h-3.5 w-3.5 text-bone/60" />
               <span className="text-bone/70">{PLATFORM_LABEL[p]}</span>
             </span>
@@ -182,6 +267,32 @@ export function FetcherPanel() {
       )}
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────
+function parseFilename(contentDisposition: string): string | null {
+  // Prefer the RFC 5987 UTF-8 form
+  const utf = /filename\*=UTF-8''([^;]+)/i.exec(contentDisposition);
+  if (utf) {
+    try {
+      return decodeURIComponent(utf[1]);
+    } catch {
+      /* fall through */
+    }
+  }
+  const ascii = /filename="?([^";]+)"?/i.exec(contentDisposition);
+  return ascii ? ascii[1] : null;
+}
+
+function defaultFilename(data: FetchSuccess, q: QualityOption): string {
+  const safe = (data.title || "video")
+    .replace(/[^\w\s.-]/g, "")
+    .trim()
+    .slice(0, 60) || "video";
+  const ext = q.id === "audio" ? "m4a" : "mp4";
+  return `${safe}.${ext}`;
 }
 
 function Spinner() {
@@ -217,13 +328,7 @@ function LoadingState() {
   );
 }
 
-function ErrorState({
-  message,
-  onDismiss,
-}: {
-  message: string;
-  onDismiss: () => void;
-}) {
+function ErrorState({ message, onDismiss }: { message: string; onDismiss: () => void }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -256,13 +361,21 @@ function ResultCard({
   selected,
   onSelect,
   onReset,
+  onDownload,
+  downloading,
+  progress,
+  downloadError,
 }: {
   data: FetchSuccess;
   selected: string | null;
   onSelect: (id: string) => void;
   onReset: () => void;
+  onDownload: () => void;
+  downloading: boolean;
+  progress: number | null;
+  downloadError: string | null;
 }) {
-  const chosen = data.formats.find((f) => f.formatId === selected) || null;
+  const chosen = data.qualities.find((q) => q.id === selected) || null;
 
   return (
     <motion.div
@@ -272,7 +385,6 @@ function ResultCard({
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
       className="card mt-8 overflow-hidden"
     >
-      {/* Header */}
       <div className="grid gap-5 p-5 sm:grid-cols-[auto_1fr] sm:p-6">
         <Thumbnail src={data.thumbnail} platform={data.platform} duration={data.duration} />
         <div className="min-w-0">
@@ -283,36 +395,38 @@ function ResultCard({
           <h2 className="mt-2 font-display text-2xl tracking-tightest leading-tight sm:text-3xl">
             {data.title}
           </h2>
-          {data.uploader && (
-            <p className="mt-1 text-sm text-bone/50">by {data.uploader}</p>
-          )}
+          {data.uploader && <p className="mt-1 text-sm text-bone/50">by {data.uploader}</p>}
         </div>
       </div>
 
-      {/* Format picker */}
       <div className="border-t hairline p-5 sm:p-6">
         <div className="flex items-center justify-between">
           <h3 className="mono-label">Choose quality</h3>
-          <button
-            onClick={onReset}
-            className="text-xs text-bone/40 hover:text-bone"
-          >
+          <button onClick={onReset} className="text-xs text-bone/40 hover:text-bone">
             New link
           </button>
         </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
-          {data.formats.map((f) => (
-            <FormatRow
-              key={f.formatId}
-              format={f}
-              selected={selected === f.formatId}
-              onSelect={() => onSelect(f.formatId)}
+          {data.qualities.map((q) => (
+            <QualityRow
+              key={q.id}
+              option={q}
+              selected={selected === q.id}
+              onSelect={() => onSelect(q.id)}
             />
           ))}
         </div>
       </div>
 
-      {/* CTA */}
+      {downloadError && (
+        <div className="border-t border-coral/20 bg-coral/[0.04] px-5 py-3 sm:px-6">
+          <p className="flex items-center gap-2 text-sm text-coral">
+            <TriangleAlert className="h-4 w-4 flex-none" />
+            {downloadError}
+          </p>
+        </div>
+      )}
+
       <div className="border-t hairline bg-ink-900/60 p-5 sm:p-6">
         <div className="flex flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-bone/50">
@@ -322,17 +436,26 @@ function ResultCard({
             </a>
             .
           </p>
-          <a
-            href={chosen ? chosen.downloadUrl : "#"}
-            aria-disabled={!chosen}
-            className={`btn-primary ${!chosen ? "pointer-events-none opacity-50" : ""}`}
-            download
+          <button
+            type="button"
+            onClick={onDownload}
+            disabled={!chosen || downloading}
+            className="btn-primary"
           >
-            <Download className="h-4 w-4" />
-            <span>
-              Download {chosen?.quality ?? ""} {chosen ? `· ${chosen.ext.toUpperCase()}` : ""}
-            </span>
-          </a>
+            {downloading ? (
+              <>
+                <Spinner />
+                <span>
+                  {progress !== null ? `Downloading… ${progress}%` : "Preparing…"}
+                </span>
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4" />
+                <span>Download {chosen?.label ?? ""}</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
     </motion.div>
@@ -373,16 +496,16 @@ function Thumbnail({
   );
 }
 
-function FormatRow({
-  format,
+function QualityRow({
+  option,
   selected,
   onSelect,
 }: {
-  format: VideoFormat;
+  option: QualityOption;
   selected: boolean;
   onSelect: () => void;
 }) {
-  const isAudio = format.hasAudio && !format.hasVideo;
+  const isAudio = option.id === "audio";
   const Icon = isAudio ? Music : Film;
   return (
     <button
@@ -403,22 +526,9 @@ function FormatRow({
           <Icon className="h-4 w-4" />
         </div>
         <div className="min-w-0">
-          <div className="flex items-baseline gap-2">
-            <span className="font-medium tracking-tight">{format.quality}</span>
-            <span className="font-mono text-[10px] uppercase text-bone/40">
-              {format.ext}
-            </span>
-          </div>
-          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-bone/50">
-            {format.size && <span>{format.size}</span>}
-            {format.size && (format.hasAudio || !format.hasVideo) && (
-              <span className="text-bone/20">·</span>
-            )}
-            {format.hasVideo && !format.hasAudio && (
-              <span className="text-coral/80">video only</span>
-            )}
-            {isAudio && <span>audio only</span>}
-            {format.hasVideo && format.hasAudio && <span>video + audio</span>}
+          <div className="font-medium tracking-tight">{option.label}</div>
+          <div className="mt-0.5 text-xs text-bone/50">
+            {isAudio ? "M4A audio" : "MP4 · video + audio"}
           </div>
         </div>
       </div>

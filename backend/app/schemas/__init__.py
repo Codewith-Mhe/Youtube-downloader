@@ -3,7 +3,15 @@ from app.schemas.models import (
     FetchRequest,
     FetchSuccess,
     Platform,
-    VideoFormat,
+    QualityOption,
+    Tier,
 )
 
-__all__ = ["FetchError", "FetchRequest", "FetchSuccess", "Platform", "VideoFormat"]
+__all__ = [
+    "FetchError",
+    "FetchRequest",
+    "FetchSuccess",
+    "Platform",
+    "QualityOption",
+    "Tier",
+]

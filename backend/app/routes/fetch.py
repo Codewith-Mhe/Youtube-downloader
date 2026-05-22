@@ -1,4 +1,4 @@
-"""POST /api/fetch — extract video metadata and produce per-format tokens."""
+"""POST /api/fetch — extract video metadata and produce one token per tier."""
 from __future__ import annotations
 
 import logging
@@ -9,7 +9,11 @@ from pydantic import ValidationError
 
 from app.middleware.rate_limit import FETCH_RATE, limiter
 from app.schemas import FetchRequest
-from app.services.extractor import ExtractionError, extract
+from app.services.extractor import (
+    TIER_LABELS,
+    ExtractionError,
+    extract_metadata,
+)
 from app.services.token_store import token_store
 from app.utils.validators import InvalidURLError, validate_url
 
@@ -21,7 +25,7 @@ router = APIRouter()
 @router.post("/fetch")
 @limiter.limit(FETCH_RATE)
 async def fetch_video(request: Request):
-    # Parse body manually so we can return our own clean error shape
+    # Parse JSON body manually so we control the error shape
     try:
         body = await request.json()
     except Exception:
@@ -40,51 +44,47 @@ async def fetch_video(request: Request):
     try:
         clean_url, platform = validate_url(str(payload.url))
     except InvalidURLError as e:
-        return JSONResponse(status_code=400, content={"success": False, "message": str(e)})
+        return JSONResponse(
+            status_code=400, content={"success": False, "message": str(e)}
+        )
 
     try:
-        info = await extract(clean_url, platform)
+        info = await extract_metadata(clean_url, platform)
     except ExtractionError as e:
-        return JSONResponse(status_code=e.status, content={"success": False, "message": e.message})
+        return JSONResponse(
+            status_code=e.status, content={"success": False, "message": e.message}
+        )
     except Exception:  # noqa: BLE001
-        log.exception("Extraction failed for platform=%s", platform)
+        log.exception("Metadata extraction failed for platform=%s", platform)
         return JSONResponse(
             status_code=500,
-            content={"success": False, "message": "Could not fetch this video. Please try again."},
+            content={
+                "success": False,
+                "message": "Could not fetch this video. Please try again.",
+            },
         )
 
-    raw_formats = info.pop("raw_formats", [])
-    suggested_base = info.pop("suggested_filename_base", "video")
-
-    # Mint a token per format so the response carries no internal URLs.
-    formats_out = []
-    for f in raw_formats:
-        if not f.get("formatId"):
-            continue
-        token = await token_store.put(
-            url=clean_url,
-            format_id=f["formatId"],
-            platform=platform,
-            ext=f.get("ext", "mp4"),
-            suggested_filename=f"{suggested_base}.{f.get('ext') or 'mp4'}",
-        )
-        formats_out.append(
-            {
-                "formatId": f["formatId"],
-                "quality": f["quality"],
-                "ext": f["ext"],
-                "size": f.get("size"),
-                "hasAudio": f["hasAudio"],
-                "hasVideo": f["hasVideo"],
-                "note": f.get("note"),
-                "downloadUrl": f"/api/download?token={token}",
-            }
-        )
-
-    if not formats_out:
+    tiers = info.get("tiers") or []
+    if not tiers:
         return JSONResponse(
             status_code=404,
-            content={"success": False, "message": "No downloadable formats were found for this video."},
+            content={
+                "success": False,
+                "message": "No downloadable quality found for this video.",
+            },
+        )
+
+    # Mint one opaque token per available tier. The token is the only
+    # identifier the frontend ever sees.
+    qualities = []
+    for tier in tiers:
+        token = await token_store.put(url=clean_url, tier=tier, platform=platform)
+        qualities.append(
+            {
+                "id": tier,
+                "label": TIER_LABELS.get(tier, tier),
+                "downloadUrl": f"/api/download?token={token}",
+            }
         )
 
     return {
@@ -94,5 +94,5 @@ async def fetch_video(request: Request):
         "thumbnail": info.get("thumbnail"),
         "duration": info.get("duration"),
         "uploader": info.get("uploader"),
-        "formats": formats_out,
+        "qualities": qualities,
     }

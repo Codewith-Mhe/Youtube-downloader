@@ -1,8 +1,22 @@
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
-pydantic==2.11.4
-yt-dlp>=2025.1.15
+pydantic==2.10.4
+yt-dlp[default,curl-cffi]>=2025.10.0
+brotli>=1.1.0
 slowapi==0.1.9
 requests==2.32.3
 anyio>=4.6.0
 python-multipart==0.0.20
+
+
+
+# yt-dlp with curl-cffi extras. curl-cffi provides TLS fingerprint
+# impersonation (Chrome/Safari/Edge), which is REQUIRED in 2026 to extract
+# from TikTok and Facebook reliably. Without it both platforms either
+# rate-limit aggressively (TikTok 429) or return garbage HTML that yt-dlp
+# can't parse (Facebook "Cannot parse data").
+#
+# Do NOT pin yt-dlp — extractor fixes ship weekly. The build script uses
+# --no-cache-dir so Render always pulls the newest matching version.
+
+# brotli decompression — some upstream CDNs require it
