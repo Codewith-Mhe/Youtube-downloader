@@ -291,27 +291,45 @@ def _platform_opts(platform: Platform) -> Dict[str, Any]:
     opts = _base_opts()
 
     if platform == "youtube":
-        # player_client order matters enormously for cloud/Render IPs.
+        # ── Player client strategy ───────────────────────────────────────────
+        # YouTube requires a Proof-of-Origin (PO) token for web clients on
+        # cloud IPs (Render, Railway, etc.) since 2024.
         #
-        # In 2025/2026 YouTube requires a Proof-of-Origin (PO) token for
-        # web clients. Without it, every web/ios/android client returns 403.
-        # The most reliable bypass WITHOUT a PO token is:
-        #   1. tv_embedded  — YouTube's Smart TV embedded player; not subject
-        #                     to PO token enforcement as of 2026.
-        #   2. web_embedded — YouTube embed (iframe) player; lighter enforcement.
-        #   3. tv           — Full TV client; fallback.
-        #   4. ios          — Mobile iOS client; sometimes works without PO token.
+        # TWO modes depending on whether cookies are available:
         #
-        # When cookies ARE present (YT_COOKIES_FILE set), web/default clients
-        # also work because the session cookie acts as implicit PO token proof.
+        # WITH cookies (YT_COOKIES_FILE set and file exists):
+        #   Use web/default clients FIRST — the session cookie (SAPISID,
+        #   __Secure-3PSID etc.) acts as implicit PO token proof.
+        #   Embedded clients are kept as fallback.
         #
-        # NOTE: player_skip:["configs"] is intentionally removed here.
-        # Skipping configs prevents the extractor from finding the right
-        # INNERTUBE_API_KEY, which causes "Failed to extract any player response"
-        # even when the network connection is fine.
+        # WITHOUT cookies:
+        #   Use embedded clients only — tv_embedded and web_embedded bypass
+        #   PO token enforcement entirely (they are iframe/TV contexts that
+        #   YouTube treats differently).
+        #
+        # NOTE: player_skip:["configs"] intentionally removed — it prevents
+        # the extractor finding INNERTUBE_API_KEY → "Failed to extract any
+        # player response" even on good connections.
+
+        cookies_exist = bool(YT_COOKIES_FILE and Path(YT_COOKIES_FILE).is_file())
+
+        if cookies_exist:
+            # Cookies present: web clients first (they honour the session),
+            # then embedded as fallback.
+            player_clients = ["web", "default", "tv_embedded", "web_embedded", "tv", "ios"]
+            log.info("YouTube: cookies detected — using web-first client order")
+        else:
+            # No cookies: embedded clients bypass PO token enforcement.
+            player_clients = ["tv_embedded", "web_embedded", "tv", "ios"]
+            log.warning(
+                "YouTube: no cookies file found at %r — using embedded clients only. "
+                "Set YT_COOKIES_FILE env var for better reliability.",
+                YT_COOKIES_FILE or "(not set)",
+            )
+
         opts["extractor_args"] = {
             "youtube": {
-                "player_client": ["tv_embedded", "web_embedded", "tv", "ios"],
+                "player_client": player_clients,
             }
         }
         opts["socket_timeout"] = 30
