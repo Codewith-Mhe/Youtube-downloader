@@ -1,54 +1,91 @@
 #!/usr/bin/env bash
-# Render build script for ClipFetch backend — v5
+# Render build script for ClipFetch backend — v6
 #
-# What this does:
-#   1. Downloads a static ffmpeg binary (Render's Python runtime has none).
-#   2. Installs Python deps without pip cache so yt-dlp is always fresh.
-#   3. Verifies curl_cffi is importable (required for TikTok/Facebook TLS).
-#   4. Verifies ImpersonateTarget.from_str works — catches BUG 1 at build time.
+# Changes from v5:
+#   - Added Node.js install (required for YouTube signature/n-challenge solving)
+#   - Added yt-dlp JS challenge solver script download
 #
-# Render → Service → Settings → Build Command:
-#       bash build.sh
-#
+# Render → Service → Settings → Build Command:  bash build.sh
 # Render → Service → Settings → Start Command:
-#       PATH="$HOME/.local/bin:$PATH" \
-#         uvicorn app.main:app --host 0.0.0.0 --port $PORT
+#   PATH="$HOME/.local/bin:$HOME/.nvm/versions/node/$(cat $HOME/.nvmrc 2>/dev/null || echo 'v20')/bin:$PATH" \
+#   uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
 set -euo pipefail
 
-FFMPEG_DIR="$HOME/.local/bin"
-mkdir -p "$FFMPEG_DIR"
+LOCAL_BIN="$HOME/.local/bin"
+mkdir -p "$LOCAL_BIN"
 
-# ── 1. Static ffmpeg ──────────────────────────────────────────────────────────
-if [[ ! -x "$FFMPEG_DIR/ffmpeg" ]]; then
+# ── 1. Node.js (required for YouTube signature + n-challenge solving) ─────────
+# yt-dlp uses Node.js to solve YouTube's JS obfuscation challenges.
+# Without it: "Signature solving failed" + "Only images are available"
+echo "→ installing Node.js via nvm"
+export NVM_DIR="$HOME/.nvm"
+
+if [[ ! -s "$NVM_DIR/nvm.sh" ]]; then
+  curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+fi
+
+# Load nvm
+source "$NVM_DIR/nvm.sh"
+
+# Install LTS Node if not present
+if ! nvm ls 20 &>/dev/null; then
+  nvm install 20
+fi
+nvm use 20
+nvm alias default 20
+
+# Symlink node/npm into LOCAL_BIN so they're on PATH at runtime
+NODE_BIN="$(nvm which 20 | xargs dirname)"
+ln -sf "$NODE_BIN/node" "$LOCAL_BIN/node"
+ln -sf "$NODE_BIN/npm"  "$LOCAL_BIN/npm"
+
+echo "→ node version: $(node --version)"
+echo "→ npm version:  $(npm --version)"
+
+# ── 2. Static ffmpeg ──────────────────────────────────────────────────────────
+if [[ ! -x "$LOCAL_BIN/ffmpeg" ]]; then
   echo "→ downloading static ffmpeg"
   TMP="$(mktemp -d)"
   curl -fsSL -o "$TMP/ffmpeg.tar.xz" \
     "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
   tar -xJf "$TMP/ffmpeg.tar.xz" -C "$TMP" --strip-components=1
-  mv "$TMP/ffmpeg"  "$FFMPEG_DIR/ffmpeg"
-  mv "$TMP/ffprobe" "$FFMPEG_DIR/ffprobe"
-  chmod +x "$FFMPEG_DIR/ffmpeg" "$FFMPEG_DIR/ffprobe"
+  mv "$TMP/ffmpeg"  "$LOCAL_BIN/ffmpeg"
+  mv "$TMP/ffprobe" "$LOCAL_BIN/ffprobe"
+  chmod +x "$LOCAL_BIN/ffmpeg" "$LOCAL_BIN/ffprobe"
   rm -rf "$TMP"
 else
   echo "→ ffmpeg already present, skipping download"
 fi
 
 echo "→ ffmpeg version:"
-"$FFMPEG_DIR/ffmpeg" -version | head -n 1
+"$LOCAL_BIN/ffmpeg" -version | head -n 1
 
-# ── 2. Python deps ────────────────────────────────────────────────────────────
+# ── 3. Python deps ────────────────────────────────────────────────────────────
 echo "→ upgrading pip"
 pip install --upgrade pip
 
 echo "→ installing python deps (no cache — ensures fresh yt-dlp)"
 pip install --no-cache-dir --upgrade -r requirements.txt
 
-# ── 3. Verify yt-dlp ─────────────────────────────────────────────────────────
+# ── 4. Verify yt-dlp ─────────────────────────────────────────────────────────
 echo "→ yt-dlp version:"
 python -m yt_dlp --version
 
-# ── 4. Verify curl_cffi + ImpersonateTarget (catches BUG 1 at build time) ────
+# ── 5. Verify Node.js is accessible to yt-dlp ────────────────────────────────
+echo "→ verifying Node.js for yt-dlp JS solver"
+python - <<'PYEOF'
+import shutil, sys
+node = shutil.which("node")
+if node:
+    import subprocess
+    ver = subprocess.check_output([node, "--version"]).decode().strip()
+    print(f"  node found at {node} ({ver}) — OK")
+else:
+    print("  WARNING: node not found on PATH — YouTube signature solving may fail")
+PYEOF
+
+# ── 6. Verify curl_cffi + ImpersonateTarget ───────────────────────────────────
 echo "→ verifying curl_cffi and ImpersonateTarget"
 python - <<'PYEOF'
 import sys
@@ -69,9 +106,14 @@ except Exception as exc:
     sys.exit(1)
 PYEOF
 
-# ── 5. Smoke-test that app imports without errors ─────────────────────────────
+# ── 7. Smoke-test app import ──────────────────────────────────────────────────
 echo "→ smoke-testing app import"
-python -c "from app.services.extractor import extract_metadata, FFMPEG_AVAILABLE, IMPERSONATE_AVAILABLE; print(f'  ffmpeg={FFMPEG_AVAILABLE} impersonate={IMPERSONATE_AVAILABLE}')"
+python -c "
+from app.services.extractor import extract_metadata, FFMPEG_AVAILABLE, IMPERSONATE_AVAILABLE
+import shutil
+node_ok = bool(shutil.which('node'))
+print(f'  ffmpeg={FFMPEG_AVAILABLE} impersonate={IMPERSONATE_AVAILABLE} node={node_ok}')
+"
 
 echo ""
 echo "✓ build complete"
