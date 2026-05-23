@@ -187,6 +187,12 @@ export function FetcherPanel() {
               </svg>
             )}
           </div>
+          {/* YouTube Coming Soon Banner */}
+<div className="flex items-center justify-center gap-2 mb-3 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
+  <PlatformIcon platform="youtube" className="h-4 w-4 text-red-400" />
+  <span className="text-sm font-semibold text-red-400 tracking-wide">YouTube support coming soon</span>
+  <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full font-black tracking-widest uppercase">SOON</span>
+</div>
           <input
             ref={inputRef}
             type="url"
@@ -194,7 +200,7 @@ export function FetcherPanel() {
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
-            placeholder="Paste Youtube, TikTok, X, or Facebook link"
+            placeholder="Paste TikTok, X, or Facebook link"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             className="flex-1 min-w-0 bg-transparent text-base sm:text-lg text-bone placeholder:text-bone/30 outline-none px-1 py-2"
