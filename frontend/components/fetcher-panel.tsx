@@ -19,7 +19,7 @@ import { PlatformIcon } from "./platform-icon";
 
 type Status = "idle" | "loading" | "ready" | "error";
 
-const PLATFORM_HINTS: Platform[] = ["youtube", "tiktok", "twitter", "facebook"];
+const PLATFORM_HINTS: Platform[] = [ "youtube", "tiktok", "twitter", "facebook"];
 
 export function FetcherPanel() {
   const [url, setUrl] = useState("");
@@ -194,7 +194,7 @@ export function FetcherPanel() {
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
-            placeholder="Paste a YouTube, TikTok, X, or Facebook link"
+            placeholder="Paste Youtube, TikTok, X, or Facebook link"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             className="flex-1 min-w-0 bg-transparent text-base sm:text-lg text-bone placeholder:text-bone/30 outline-none px-1 py-2"
@@ -255,16 +255,22 @@ export function FetcherPanel() {
 
       {/* ─── Idle hints ─── */}
       {status === "idle" && (
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs text-bone/40">
-          <span className="mono-label !tracking-[0.2em] !text-bone/30">Supports</span>
-          {PLATFORM_HINTS.map((p) => (
-            <span key={p} className="inline-flex items-center gap-1.5 rounded-full border hairline px-3 py-1.5">
-              <PlatformIcon platform={p} className="h-3.5 w-3.5 text-bone/60" />
-              <span className="text-bone/70">{PLATFORM_LABEL[p]}</span>
-            </span>
-          ))}
-        </div>
-      )}
+  <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs text-bone/40">
+    <span className="mono-label !tracking-[0.2em] !text-bone/30">Supports</span>
+    {PLATFORM_HINTS.map((p) => (
+      <span key={p} className="inline-flex items-center gap-1.5 rounded-full border hairline px-3 py-1.5">
+        <PlatformIcon platform={p} className="h-3.5 w-3.5 text-bone/60" />
+        <span className="text-bone/70">{PLATFORM_LABEL[p]}</span>
+      </span>
+    ))}
+    {/* YouTube coming soon */}
+    <span className="inline-flex items-center gap-1.5 rounded-full border hairline px-3 py-1.5 opacity-40 cursor-not-allowed">
+      <PlatformIcon platform="youtube" className="h-3.5 w-3.5 text-bone/40" />
+      <span className="text-bone/50">YouTube</span>
+      <span className="text-[10px] text-bone/40 ml-0.5">soon</span>
+    </span>
+  </div>
+)}
     </div>
   );
 }

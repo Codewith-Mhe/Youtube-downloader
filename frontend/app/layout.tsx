@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     type: "website",
     title: "ClipFetch — Download videos in seconds",
     description:
-      "Download videos from YouTube, TikTok, X, and Facebook instantly in multiple qualities.",
+      "Download videos from  TikTok, X, and Facebook instantly in multiple qualities.",
     url: SITE_URL,
     siteName: "ClipFetch",
   },

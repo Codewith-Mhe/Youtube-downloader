@@ -40,7 +40,7 @@ export default function DmcaPage() {
       </Section>
 
       <Section title="Where to send">
-        <p className="font-mono text-sm text-lime">copyright@clipfetch.app</p>
+        <p className="font-mono text-sm text-lime">copyright joshuasundayola@gmail.com</p>
         <p className="text-sm text-bone/55">
           We aim to respond to valid notices within five business days. For the
           fastest result, please direct your notice to the platform hosting the
