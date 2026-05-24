@@ -19,7 +19,7 @@ import { PlatformIcon } from "./platform-icon";
 
 type Status = "idle" | "loading" | "ready" | "error";
 
-const PLATFORM_HINTS: Platform[] = [ "youtube", "tiktok", "twitter", "facebook"];
+const PLATFORM_HINTS: Platform[] = [ "tiktok", "twitter", "facebook"];
 
 export function FetcherPanel() {
   const [url, setUrl] = useState("");
@@ -187,12 +187,7 @@ export function FetcherPanel() {
               </svg>
             )}
           </div>
-          {/* YouTube Coming Soon Banner */}
-<div className="flex items-center justify-center gap-2 mb-3 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
-  <PlatformIcon platform="youtube" className="h-4 w-4 text-red-400" />
-  <span className="text-sm font-semibold text-red-400 tracking-wide">YouTube support coming soon</span>
-  <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full font-black tracking-widest uppercase">SOON</span>
-</div>
+
           <input
             ref={inputRef}
             type="url"
@@ -270,11 +265,12 @@ export function FetcherPanel() {
       </span>
     ))}
     {/* YouTube coming soon */}
-    <span className="inline-flex items-center gap-1.5 rounded-full border hairline px-3 py-1.5 opacity-40 cursor-not-allowed">
-      <PlatformIcon platform="youtube" className="h-3.5 w-3.5 text-bone/40" />
-      <span className="text-bone/50">YouTube</span>
-      <span className="text-[10px] text-bone/40 ml-0.5">soon</span>
-    </span>
+    {/* YouTube Coming Soon */}
+<span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/30 px-3 py-1.5">
+  <PlatformIcon platform="youtube" className="h-3.5 w-3.5 text-red-400" />
+  <span className="text-red-400 font-semibold">YouTube</span>
+  <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider">soon</span>
+</span>
   </div>
 )}
     </div>
