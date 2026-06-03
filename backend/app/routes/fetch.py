@@ -65,6 +65,7 @@ async def fetch_video(request: Request):
         )
 
     tiers = info.get("tiers") or []
+    filesizes: dict = info.get("filesizes") or {}  # ← NEW
     if not tiers:
         return JSONResponse(
             status_code=404,
@@ -84,6 +85,7 @@ async def fetch_video(request: Request):
                 "id": tier,
                 "label": TIER_LABELS.get(tier, tier),
                 "downloadUrl": f"/api/download?token={token}",
+                "filesize": filesizes.get(tier),  # ← NEW
             }
         )
 

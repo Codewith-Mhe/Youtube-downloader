@@ -315,35 +315,12 @@ def _platform_opts(platform: Platform) -> Dict[str, Any]:
     opts = _base_opts()
 
     if platform == "youtube":
-        # ── Player client strategy ───────────────────────────────────────────
-        # YouTube requires a Proof-of-Origin (PO) token for web clients on
-        # cloud IPs (Render, Railway, etc.) since 2024.
-        #
-        # TWO modes depending on whether cookies are available:
-        #
-        # WITH cookies (YT_COOKIES_FILE set and file exists):
-        #   Use web/default clients FIRST — the session cookie (SAPISID,
-        #   __Secure-3PSID etc.) acts as implicit PO token proof.
-        #   Embedded clients are kept as fallback.
-        #
-        # WITHOUT cookies:
-        #   Use embedded clients only — tv_embedded and web_embedded bypass
-        #   PO token enforcement entirely (they are iframe/TV contexts that
-        #   YouTube treats differently).
-        #
-        # NOTE: player_skip:["configs"] intentionally removed — it prevents
-        # the extractor finding INNERTUBE_API_KEY → "Failed to extract any
-        # player response" even on good connections.
-
         cookies_exist = bool(YT_COOKIES_FILE and Path(YT_COOKIES_FILE).is_file())
 
         if cookies_exist:
-            # Cookies present: web clients first (they honour the session),
-            # then embedded as fallback.
             player_clients = ["web", "default", "tv_embedded", "web_embedded", "tv", "ios"]
             log.info("YouTube: cookies detected — using web-first client order")
         else:
-            # No cookies: embedded clients bypass PO token enforcement.
             player_clients = ["tv_embedded", "web_embedded", "tv", "ios"]
             log.warning(
                 "YouTube: no cookies file found at %r — using embedded clients only. "
@@ -372,8 +349,6 @@ def _platform_opts(platform: Platform) -> Dict[str, Any]:
         opts["http_headers"]["Referer"] = "https://twitter.com/"
 
     elif platform == "facebook":
-        # Facebook stalls connections on residential + cloud IPs.
-        # Longer socket_timeout prevents premature "Request timed out" errors.
         opts["socket_timeout"] = 40
         opts["retries"] = 5
         opts["http_headers"]["Referer"] = "https://www.facebook.com/"
@@ -383,12 +358,6 @@ def _platform_opts(platform: Platform) -> Dict[str, Any]:
         opts["http_headers"]["Accept-Encoding"] = "gzip, deflate, br"
         opts["http_headers"]["Connection"] = "keep-alive"
         opts["http_headers"]["Upgrade-Insecure-Requests"] = "1"
-        # NOTE: curl_cffi impersonation is intentionally NOT used for Facebook.
-        # On many Windows machines and some cloud hosts, libcurl (used by
-        # curl_cffi) cannot connect to facebook.com port 443 even when Python's
-        # built-in urllib can. We fall back to yt-dlp's default Python HTTP
-        # handler which uses urllib3 and works reliably everywhere.
-        # BUG 6 FIX: apply platform-specific cookie file.
         _apply_cookies(opts, FB_COOKIES_FILE)
 
     return opts
@@ -420,7 +389,7 @@ def _classify_error(err: BaseException, platform: Platform | None = None) -> Ext
             status=500,
         )
 
-    # ── YouTube bot detection / PO token (most common on cloud IPs 2025/2026) ─
+    # ── YouTube bot detection / PO token ────────────────────────────────────
     if "sign in to confirm" in msg or "not a bot" in msg or "confirm you're not" in msg:
         if YT_COOKIES_FILE:
             return ExtractionError(
@@ -435,9 +404,6 @@ def _classify_error(err: BaseException, platform: Platform | None = None) -> Ext
             status=429,
         )
 
-    # ── YouTube: failed to extract any player response ────────────────────────
-    # This happens when ALL player clients return 403 — either the server IP is
-    # fully blocked by YouTube, or cookies are missing/expired.
     if "failed to extract any player response" in msg:
         if YT_COOKIES_FILE:
             return ExtractionError(
@@ -454,7 +420,6 @@ def _classify_error(err: BaseException, platform: Platform | None = None) -> Ext
             status=429,
         )
 
-    # ── YouTube: INNERTUBE_CONTEXT missing (oauth2 plugin conflict) ───────────
     if "innertube_context" in msg:
         return ExtractionError(
             "YouTube extractor conflict — a yt-dlp plugin is interfering. "
@@ -462,7 +427,6 @@ def _classify_error(err: BaseException, platform: Platform | None = None) -> Ext
             status=500,
         )
 
-    # ── Proxy authentication failure ─────────────────────────────────────────
     if "407" in msg or "proxy authentication" in msg or "proxyerror" in msg.replace(" ", ""):
         return ExtractionError(
             "Proxy authentication failed (407). "
@@ -470,10 +434,6 @@ def _classify_error(err: BaseException, platform: Platform | None = None) -> Ext
             status=502,
         )
 
-    # ── BUG 2 FIX: HTTP 403 — Facebook and TikTok block cloud IPs ───────────
-    # When cookies are present the 403 is a true access-denied (private/login).
-    # When cookies are absent it usually means the platform is blocking the
-    # cloud egress IP.  Surface a helpful message either way.
     if "http error 403" in msg or "403: forbidden" in msg or "forbidden" in msg:
         if platform == "facebook":
             if FB_COOKIES_FILE:
@@ -508,7 +468,6 @@ def _classify_error(err: BaseException, platform: Platform | None = None) -> Ext
             status=403,
         )
 
-    # ── Facebook parse failure (curl_cffi missing) ───────────────────────────
     if "cannot parse data" in msg:
         if not IMPERSONATE_AVAILABLE:
             return ExtractionError(
@@ -522,7 +481,6 @@ def _classify_error(err: BaseException, platform: Platform | None = None) -> Ext
             status=400,
         )
 
-    # ── Geo / unsupported / access control ──────────────────────────────────
     if isinstance(err, GeoRestrictedError) or ("geo" in msg and "restrict" in msg):
         return ExtractionError("This video is geo-restricted.", status=451)
     if isinstance(err, UnsupportedError):
@@ -556,6 +514,101 @@ def _classify_error(err: BaseException, platform: Platform | None = None) -> Ext
         "Could not fetch this video. It may be private, restricted, or unsupported.",
         status=400,
     )
+
+
+# ── File size estimation ──────────────────────────────────────────────────────
+def _format_size(size_bytes: int) -> str:
+    """Convert raw bytes to a human-readable string e.g. '12 MB'."""
+    if size_bytes <= 0:
+        return "Size unknown"
+    if size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.0f} KB"
+    if size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.0f} MB"
+    return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+
+
+def _estimate_tier_filesizes(info: Dict[str, Any]) -> Dict[str, str]:
+    """Return a mapping of tier → human-readable file size.
+
+    Priority order per format:
+      1. filesize (exact, from yt-dlp metadata)
+      2. filesize_approx (platform-reported estimate)
+      3. bitrate × duration (calculated fallback)
+      4. "Size unknown" if none of the above work
+
+    Never touches the download flow — purely additive.
+    """
+    formats: List[Dict[str, Any]] = info.get("formats") or []
+    duration: float = info.get("duration") or 0  # seconds
+
+    def _bytes_for_fmt(fmt: Dict[str, Any]) -> int:
+        for key in ("filesize", "filesize_approx"):
+            v = fmt.get(key)
+            if isinstance(v, (int, float)) and v > 0:
+                return int(v)
+        tbr = fmt.get("tbr") or 0
+        vbr = fmt.get("vbr") or 0
+        abr = fmt.get("abr") or 0
+        total_kbps = tbr or (vbr + abr)
+        if total_kbps > 0 and duration > 0:
+            return int(total_kbps * 1000 / 8 * duration)
+        return 0
+
+    def _video_size_for_height(max_h: int) -> str:
+        # Best video stream at or below max_h
+        candidates = [
+            f for f in formats
+            if isinstance(f.get("height"), int)
+            and f["height"] <= max_h
+            and f.get("vcodec") not in (None, "none")
+        ]
+        if not candidates:
+            # Fallback: any format at or below that height
+            candidates = [
+                f for f in formats
+                if isinstance(f.get("height"), int) and f["height"] <= max_h
+            ]
+        if not candidates:
+            return "Size unknown"
+        candidates.sort(key=lambda f: f.get("height", 0), reverse=True)
+        video_bytes = _bytes_for_fmt(candidates[0])
+
+        # Add the best audio-only stream on top (yt-dlp merges them)
+        audio_only = [
+            f for f in formats
+            if f.get("acodec") not in (None, "none")
+            and f.get("vcodec") in (None, "none")
+        ]
+        audio_bytes = max((_bytes_for_fmt(a) for a in audio_only), default=0)
+
+        total = video_bytes + audio_bytes
+        return _format_size(total) if total > 0 else "Size unknown"
+
+    result: Dict[str, str] = {}
+
+    # "best" — use the tallest available stream
+    all_heights = [f.get("height", 0) for f in formats if isinstance(f.get("height"), int)]
+    max_height = max(all_heights) if all_heights else 0
+    result["best"] = _video_size_for_height(max_height) if max_height else "Size unknown"
+
+    # Fixed-height tiers
+    for h in (1080, 720, 480, 360):
+        result[f"{h}p"] = _video_size_for_height(h)
+
+    # Audio-only tier
+    audio_only = [
+        f for f in formats
+        if f.get("acodec") not in (None, "none")
+        and f.get("vcodec") in (None, "none")
+    ]
+    if audio_only:
+        best_audio_bytes = max((_bytes_for_fmt(a) for a in audio_only), default=0)
+        result["audio"] = _format_size(best_audio_bytes) if best_audio_bytes > 0 else "Size unknown"
+    else:
+        result["audio"] = "Size unknown"
+
+    return result
 
 
 # ── Metadata extraction ───────────────────────────────────────────────────────
@@ -618,6 +671,7 @@ async def extract_metadata(url: str, platform: Platform) -> Dict[str, Any]:
 
     title = info.get("title") or "Untitled"
     tiers = _detect_available_tiers(info)
+    filesizes = _estimate_tier_filesizes(info)  # ← NEW
     return {
         "platform": platform,
         "title": title,
@@ -625,6 +679,7 @@ async def extract_metadata(url: str, platform: Platform) -> Dict[str, Any]:
         "duration": format_duration(info.get("duration")),
         "uploader": info.get("uploader") or info.get("channel"),
         "tiers": tiers,
+        "filesizes": filesizes,  # ← NEW
         "normalized_url": url,
     }
 

@@ -264,7 +264,6 @@ export function FetcherPanel() {
         <span className="text-bone/70">{PLATFORM_LABEL[p]}</span>
       </span>
     ))}
-    {/* YouTube coming soon */}
     {/* YouTube Coming Soon */}
 <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/30 px-3 py-1.5">
   <PlatformIcon platform="youtube" className="h-3.5 w-3.5 text-red-400" />
@@ -537,6 +536,10 @@ function QualityRow({
           <div className="font-medium tracking-tight">{option.label}</div>
           <div className="mt-0.5 text-xs text-bone/50">
             {isAudio ? "M4A audio" : "MP4 · video + audio"}
+            {/* ← NEW: show file size if available */}
+            {option.filesize ? (
+              <span className="ml-2 text-bone/40">{option.filesize}</span>
+            ) : null}
           </div>
         </div>
       </div>

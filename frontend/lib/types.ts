@@ -6,6 +6,7 @@ export interface QualityOption {
   id: Tier;
   label: string;
   downloadUrl: string;
+  filesize?: string | null; // ← NEW
 }
 
 export interface FetchSuccess {
