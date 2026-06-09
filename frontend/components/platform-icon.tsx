@@ -33,14 +33,14 @@ export function PlatformIcon({ platform, className = "h-5 w-5" }: Props) {
         </svg>
       );
     case "facebook":
-      return (
-        <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-          <path
-            d="M14 8.5h2.5V5.5h-2.5c-2 0-3.5 1.5-3.5 3.5V11H8v3h2.5v7H14v-7h2.5l.5-3H14V9c0-.3.2-.5.5-.5h.5z"
-            fill="currentColor"
-          />
-        </svg>
-      );
+  return (
+    <svg viewBox="0 0 24 24" className={`${className} platform-facebook`} aria-hidden="true">
+      <path
+        d="M14 8.5h2.5V5.5h-2.5c-2 0-3.5 1.5-3.5 3.5V11H8v3h2.5v7H14v-7h2.5l.5-3H14V9c0-.3.2-.5.5-.5h.5z"
+        fill="currentColor"
+      />
+    </svg>
+  );
     default:
       return null;
   }

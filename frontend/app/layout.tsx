@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Instrument_Serif } from "next/font/google";
+import { ThemeProvider } from "next-themes";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
@@ -18,20 +19,17 @@ const instrumentSerif = Instrument_Serif({
   display: "swap",
 });
 
-const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://clipfetch.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://clipfetch.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default:
-      "ClipFetch — Download videos from YouTube, TikTok, X, and Facebook",
+    default: "ClipFetch — Download videos from TikTok, X, and Facebook",
     template: "%s · ClipFetch",
   },
   description:
-    "Download videos from YouTube, TikTok, X, and Facebook instantly in multiple qualities — fast, free, and without signup.",
+    "Download videos from TikTok, X, and Facebook instantly in multiple qualities — fast, free, and without signup.",
   keywords: [
-    "youtube downloader",
     "tiktok downloader",
     "twitter video downloader",
     "x video downloader",
@@ -43,21 +41,16 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     title: "ClipFetch — Download videos in seconds",
-    description:
-      "Download videos from  TikTok, X, and Facebook instantly in multiple qualities.",
+    description: "Download videos from TikTok, X, and Facebook instantly in multiple qualities.",
     url: SITE_URL,
     siteName: "ClipFetch",
   },
   twitter: {
     card: "summary_large_image",
     title: "ClipFetch — Download videos in seconds",
-    description:
-      "Paste your video link, choose quality, and download instantly.",
+    description: "Paste your video link, choose quality, and download instantly.",
   },
-  robots: {
-    index: true,
-    follow: true,
-  },
+  robots: { index: true, follow: true },
 };
 
 export const viewport: Viewport = {
@@ -66,28 +59,18 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={`${inter.variable} ${instrumentSerif.variable}`}
-    >
-      <body className="min-h-screen relative bg-black text-white antialiased">
-        <div className="grain-overlay" aria-hidden="true" />
-
-        <div className="relative z-10 flex min-h-screen flex-col">
-          <SiteHeader />
-
-          <main className="flex-1">
-            {children}
-          </main>
-
-          <SiteFooter />
-        </div>
+    <html lang="en" className={`${inter.variable} ${instrumentSerif.variable}`} suppressHydrationWarning>
+      <body className="min-h-screen relative antialiased">
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+          <div className="grain-overlay" aria-hidden="true" />
+          <div className="relative z-10 flex min-h-screen flex-col">
+            <SiteHeader />
+            <main className="flex-1">{children}</main>
+            <SiteFooter />
+          </div>
+        </ThemeProvider>
       </body>
     </html>
   );

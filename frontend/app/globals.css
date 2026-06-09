@@ -20,10 +20,10 @@
     background-attachment: fixed;
   }
   @supports (-webkit-touch-callout: none) {
-  body {
-    background-attachment: scroll;
+    body {
+      background-attachment: scroll;
+    }
   }
-}
   ::selection {
     background: theme("colors.lime.DEFAULT");
     color: theme("colors.ink.950");
@@ -82,3 +82,77 @@
   from { background-position: 0 0; }
   to { background-position: 80px 0; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Light mode overrides
+───────────────────────────────────────────────────────────────────────── */
+html.light {
+  color-scheme: light;
+}
+
+.light body {
+  background-color: #e8e8e4;
+  color: #1a1a1a;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(200, 242, 92, 0.12), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 100% 100%, rgba(255, 122, 89, 0.06), transparent 60%);
+}
+
+/* Typography */
+.light h1,
+.light h2,
+.light h3,
+.light h4,
+.light p {
+  color: #1a1a1a;
+}
+
+/* Text utilities */
+.light .text-bone        { color: #1a1a1a !important; }
+.light .text-bone\/70    { color: rgba(26,26,26,0.70) !important; }
+.light .text-bone\/60    { color: rgba(26,26,26,0.60) !important; }
+.light .text-bone\/50    { color: rgba(26,26,26,0.50) !important; }
+.light .text-bone\/40    { color: rgba(26,26,26,0.40) !important; }
+.light .text-bone\/30    { color: rgba(26,26,26,0.30) !important; }
+
+/* Backgrounds */
+.light .bg-ink-950\/70   { background-color: rgba(232,232,228,0.85) !important; }
+.light .bg-ink-900\/60   { background-color: rgba(255,255,255,0.60) !important; }
+.light .bg-ink-900\/80   { background-color: rgba(255,255,255,0.80) !important; }
+
+/* Components */
+.light .hairline          { border-color: rgba(0,0,0,0.10) !important; }
+.light .mono-label        { color: rgba(26,26,26,0.50) !important; }
+
+.light .card {
+  background-color: rgba(255,255,255,0.75) !important;
+  border-color: rgba(0,0,0,0.08) !important;
+}
+
+.light .input-shell {
+  background-color: rgba(255,255,255,0.80) !important;
+  border-color: rgba(0,0,0,0.10) !important;
+}
+
+/* Platform icon boxes — keep dark so icons stay visible */
+.light .bg-ink-700,
+.light .bg-ink-800,
+.light .bg-ink-900        { background-color: #2a2a2a !important; }
+
+.light .bg-ink-700\/60,
+.light .bg-ink-800\/40,
+.light .bg-ink-800\/80    { background-color: rgba(42,42,42,0.90) !important; }
+
+.light [class*="rounded-2xl"][class*="bg-ink"] {
+  background-color: #2a2a2a !important;
+}
+
+/* Icon colors inside dark boxes stay white */
+.light [class*="bg-ink"] .text-bone\/60,
+.light [class*="bg-ink"] .text-bone\/50,
+.light [class*="bg-ink"] .text-bone\/40 {
+  color: rgba(255,255,255,0.70) !important;
+}
+
+/* Facebook icon — blue in light mode, default in dark mode */
+.light .platform-facebook { color: #1877F2 !important; }

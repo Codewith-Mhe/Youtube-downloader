@@ -15,3 +15,9 @@ async def health_get():
 @router.head("/api/health")
 async def health_head():
     return Response(status_code=200)
+
+
+# Handles HEAD requests from UptimeRobot
+@router.head("/api/health")
+async def health_head():
+    return Response(status_code=200)

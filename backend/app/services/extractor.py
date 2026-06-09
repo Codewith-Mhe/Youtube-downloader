@@ -660,6 +660,12 @@ def _extract_metadata_sync(url: str, platform: Platform) -> Dict[str, Any]:
 
 
 async def extract_metadata(url: str, platform: Platform) -> Dict[str, Any]:
+    if platform == "youtube":
+        from app.services.youtube import YoutubeExtractionError, extract_metadata as yt_extract
+        try:
+            return await yt_extract(url)
+        except YoutubeExtractionError as e:
+            raise ExtractionError(e.message, status=e.status) from e
     url = _normalize_url(url, platform)
     try:
         info = await asyncio.wait_for(
@@ -671,7 +677,7 @@ async def extract_metadata(url: str, platform: Platform) -> Dict[str, Any]:
 
     title = info.get("title") or "Untitled"
     tiers = _detect_available_tiers(info)
-    filesizes = _estimate_tier_filesizes(info)  # ← NEW
+    filesizes = _estimate_tier_filesizes(info)  
     return {
         "platform": platform,
         "title": title,
@@ -679,12 +685,12 @@ async def extract_metadata(url: str, platform: Platform) -> Dict[str, Any]:
         "duration": format_duration(info.get("duration")),
         "uploader": info.get("uploader") or info.get("channel"),
         "tiers": tiers,
-        "filesizes": filesizes,  # ← NEW
-        "normalized_url": url,
+        "filesizes": filesizes,  
+        "normalized_url": url,  
     }
 
 
-# ── Download ──────────────────────────────────────────────────────────────────
+# ── Download 
 def _safe_basename(title: str) -> str:
     base = "".join(c for c in (title or "video") if c.isalnum() or c in " -_.").strip()
     return (base[:80] or "video").rstrip(".")
@@ -699,10 +705,16 @@ _CONTENT_TYPES = {
     "ogg": "audio/ogg",
 }
 
-
 def download_to_tempfile(
     url: str, tier: str, platform: Platform
 ) -> Tuple[Path, str, str]:
+    if platform == "youtube":
+        from app.services.youtube.extractor import _download_sync as _yt_download_sync, _normalize_youtube_url
+        from app.services.youtube.errors import YoutubeExtractionError
+        try:
+            return _yt_download_sync(_normalize_youtube_url(url), tier)
+        except YoutubeExtractionError as e:
+            raise ExtractionError(e.message, status=e.status) from e
     url = _normalize_url(url, platform)
     selector = _selector_for_tier(tier, platform)
     tmpdir = Path(tempfile.mkdtemp(prefix="clipfetch_"))
