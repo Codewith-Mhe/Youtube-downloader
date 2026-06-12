@@ -119,7 +119,7 @@ def _base_yt_opts() -> Dict[str, Any]:
         "concurrent_fragment_downloads": 3,
         "geo_bypass": True,
         "force_ipv4": True,
-        "nocheckcertificate": False,
+        "nocheckcertificate": True,
         "http_headers": {
             "User-Agent": UA_DESKTOP,
             "Accept-Language": "en-US,en;q=0.9",
@@ -127,12 +127,11 @@ def _base_yt_opts() -> Dict[str, Any]:
         },
         # Prefer the TV and iOS clients — they are less aggressively
         # fingerprinted than the web client and handle Shorts well.
-     "extractor_args": {
+    "extractor_args": {
     "youtube": {
-        "player_client": ["web", "tv", "ios"],
-        "po_token": ["web+auto"],  # experimental — helps bypass bot detection
+        "player_client": ["ios", "android", "tv_embedded"],
     }
-}
+},
     }
 
     cookies_path = resolve_cookies_path()
