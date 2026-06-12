@@ -129,7 +129,7 @@ def _base_yt_opts() -> Dict[str, Any]:
         # fingerprinted than the web client and handle Shorts well.
     "extractor_args": {
     "youtube": {
-        "player_client": ["ios", "android", "tv_embedded"],
+        "player_client": ["tv_embedded", "web_embedded"],
     }
 },
     }

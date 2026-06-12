@@ -35,6 +35,7 @@ fi
 echo "→ ffmpeg version: $($LOCAL_BIN/ffmpeg -version | head -1)"
 
 pip install --upgrade pip
+pip install --upgrade yt-dlp
 pip install --no-cache-dir --upgrade -r requirements.txt
 echo "→ yt-dlp: $(python -m yt_dlp --version)"
 
