@@ -54,11 +54,9 @@ def classify_youtube_error(err: BaseException) -> YoutubeExtractionError:
         )
     ):
         return YoutubeExtractionError(
-            "YouTube is asking for sign-in verification from our server.  "
-            "This is common with cloud-hosted downloaders.  "
-            "Please try again in a few minutes, or try a different video.",
-            status=429,
-        )
+        "YouTube downloads are temporarily unavailable on our server. ",
+        status=429,
+    )
 
     # ── expired / invalid cookies ─────────────────────────────────────────
     if "cookies" in msg and any(
