@@ -128,11 +128,12 @@ def _base_yt_opts() -> Dict[str, Any]:
         # Prefer the TV and iOS clients — they are less aggressively
         # fingerprinted than the web client and handle Shorts well.
         "extractor_args": {
-            "youtube": {
-                "player_client": ["tv", "ios", "default", "mweb"],
-                "player_skip": ["configs"],
-            }
-        },
+        "youtube": {
+        "player_client": ["web", "tv", "ios"],
+        "player_skip": ["webpage", "configs"],
+        "po_token": ["web+auto"],  # experimental — helps bypass bot detection
+    }
+    },
     }
 
     cookies_path = resolve_cookies_path()
