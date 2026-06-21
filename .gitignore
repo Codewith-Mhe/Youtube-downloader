@@ -18,6 +18,15 @@ out/
 .env.production
 .env.development.local
 
+# Secrets — NEVER commit cookies or credential files.
+# Cookies belong in Render Secret Files / env vars, not in the repo.
+*cookies*.txt
+*COOKIES*.txt
+*_cookies.txt
+YT_COOKIES_FILE.txt
+cookies.txt
+*.cookies
+
 # OS
 .DS_Store
 Thumbs.db
